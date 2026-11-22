@@ -18,7 +18,7 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                echo 'Setting up Python environment'
+                echo 'Installing application and testing dependencies'
 
                 sh '''
                     python3 --version
@@ -26,30 +26,47 @@ pipeline {
                     . .venv/bin/activate
 
                     python -m pip install --upgrade pip
-                    pip install -r requirements.txt
+                    pip install -r requirements-dev.txt
                 '''
             }
         }
 
-        stage('Run Tests') {
+        stage('Run Tests and Coverage') {
             steps {
-                echo 'Running ShopSphere automated tests'
+                echo 'Running pytest and generating reports'
 
                 sh '''
                     . .venv/bin/activate
-                    pytest -v
+                    mkdir -p reports
+
+                    pytest -v \
+                      --junitxml=reports/junit.xml \
+                      --cov=app \
+                      --cov-report=term-missing \
+                      --cov-report=xml:reports/coverage.xml \
+                      --cov-report=html:reports/htmlcov
                 '''
             }
         }
     }
 
     post {
+        always {
+            echo 'Publishing test and coverage reports'
+
+            junit testResults: 'reports/junit.xml',
+                  allowEmptyResults: true
+
+            archiveArtifacts artifacts: 'reports/**',
+                             allowEmptyArchive: true
+        }
+
         success {
-            echo 'ShopSphere CI Pipeline completed successfully!'
+            echo 'ShopSphere tests and coverage completed successfully!'
         }
 
         failure {
-            echo 'ShopSphere CI Pipeline failed. Check the console output.'
+            echo 'Pipeline failed. Check the test results and console output.'
         }
     }
 }
