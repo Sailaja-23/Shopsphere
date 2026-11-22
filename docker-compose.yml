@@ -17,7 +17,7 @@ services:
 
   app:
     build: .
-    image: shopsphere:1.0
+    image: shopsphere:${DEPLOY_IMAGE_TAG:-1.0}
     container_name: shopsphere-api
     restart: unless-stopped
     env_file:

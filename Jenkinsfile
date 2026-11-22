@@ -82,17 +82,37 @@ pipeline {
 
                         trap 'rm -f .env.docker' EXIT
 
-                        echo "Validating Docker Compose configuration"
+                        echo "Selecting Jenkins build image"
+
+                        export DEPLOY_IMAGE_TAG="build-${BUILD_NUMBER}"
+
+                        echo "Deploying shopsphere:${DEPLOY_IMAGE_TAG}"
 
                         docker compose -p shopsphere config --quiet
 
-                        echo "Deploying ShopSphere"
-
-                        docker compose -p shopsphere up -d --no-build
-
+                        docker compose -p shopsphere up -d --no-build --force-recreate app
                         echo "Checking deployment status"
 
                         docker compose -p shopsphere ps
+						echo "Verifying deployed Docker image"
+
+                        expected_image="shopsphere:${DEPLOY_IMAGE_TAG}"
+                        actual_image=$(docker inspect --format='{{.Config.Image}}' shopsphere-api)
+
+                        echo "Expected image: $expected_image"
+                        echo "Actual image:   $actual_image"
+						if [ "$actual_image" != "$expected_image" ]; then
+                            echo "ERROR: Deployed image does not match Jenkins build"
+                            exit 1
+                        fi
+                        echo "Verifying PostgreSQL health"
+                        db_status=$(docker inspect --format='{{.State.Health.Status}}' shopsphere-db)
+                        echo "PostgreSQL status: $db_status"
+                        if [ "$db_status" != "healthy" ]; then
+                            echo "ERROR: PostgreSQL is not healthy"
+                            exit 1
+                        fi
+                        
 
                         echo "Waiting for API health"
 
