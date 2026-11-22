@@ -1,6 +1,11 @@
-
 pipeline {
     agent any
+
+    options {
+    timestamps()
+    timeout(time: 20, unit: 'MINUTES')
+    disableConcurrentBuilds()
+    }
 
     environment {
         DATABASE_URL = 'sqlite://'
@@ -137,7 +142,13 @@ pipeline {
         }
 
         failure {
-            echo 'ShopSphere CI/CD pipeline failed. Check Console Output.'
+            echo 'ShopSphere CI/CD pipeline failed.'
+
+            sh '''
+                echo "Collecting deployment diagnostics..."
+                docker compose -p shopsphere ps || true
+                docker compose -p shopsphere logs --tail=50 app || true
+            '''
         }
     }
 }
