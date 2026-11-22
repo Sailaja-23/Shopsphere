@@ -57,7 +57,24 @@ pipeline {
                 '''
             }
         }
+        stage('Deploy with Docker Compose') {
+            steps {
+                sh '''
+                    echo "Deploying ShopSphere"
+                    docker compose -p shopsphere up -d --no-build
+
+                    echo "Checking container status"
+                    docker compose -p shopsphere ps
+
+                    echo "Waiting for API"
+                    curl --fail --retry 10 --retry-delay 5 --retry-connrefused http://127.0.0.1:8000/docs
+
+                    echo "ShopSphere deployment successful"
+               '''
+            }
+        }
     }
+      
 
     post {
         always {
