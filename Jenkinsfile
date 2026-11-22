@@ -91,11 +91,24 @@ pipeline {
 
                         echo "Waiting for API health"
 
-                        curl --fail \
-                          --retry 10 \
-                          --retry-delay 5 \
-                          --retry-connrefused \
-                          http://127.0.0.1:8000/docs
+                        attempt=1
+
+                        while [ "$attempt" -le 30 ]; do
+                            if curl -fsS http://127.0.0.1:8000/docs -o /dev/null; then
+                               echo "ShopSphere API is responding successfully"
+                               break
+                            fi
+
+                            echo "API not ready yet. Attempt $attempt/30"
+                            attempt=$((attempt + 1))
+                            sleep 5
+                        done
+
+                        if [ "$attempt" -gt 30 ]; then
+                            echo "ShopSphere API failed to become ready"
+                            docker compose -p shopsphere logs --tail=80 app
+                            exit 1
+                        fi
 
                         echo "ShopSphere deployment successful"
                     '''
