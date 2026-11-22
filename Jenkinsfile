@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -12,7 +13,6 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                echo 'Checking out ShopSphere source code'
                 checkout scm
             }
         }
@@ -22,7 +22,6 @@ pipeline {
                 sh '''
                     python3 -m venv .venv
                     . .venv/bin/activate
-                    python -m pip install --upgrade pip
                     pip install -r requirements-dev.txt
                 '''
             }
@@ -32,6 +31,7 @@ pipeline {
             steps {
                 sh '''
                     . .venv/bin/activate
+
                     mkdir -p reports
 
                     pytest -v \
@@ -53,45 +53,78 @@ pipeline {
                       -t ${IMAGE_NAME}:${IMAGE_TAG} \
                       -t ${IMAGE_NAME}:build-${BUILD_NUMBER} .
 
-                    docker images shopsphere
+                    docker images ${IMAGE_NAME}
                 '''
             }
         }
+
         stage('Deploy with Docker Compose') {
             steps {
-                sh '''
-                    echo "Deploying ShopSphere"
-                    docker compose -p shopsphere up -d --no-build
+                withCredentials([
+                    file(
+                        credentialsId: 'shopsphere-env',
+                        variable: 'ENV_FILE'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+                        set -e
 
-                    echo "Checking container status"
-                    docker compose -p shopsphere ps
+                        echo "Preparing secure environment file"
 
-                    echo "Waiting for API"
-                    curl --fail --retry 10 --retry-delay 5 --retry-connrefused http://127.0.0.1:8000/docs
+                        cp "$ENV_FILE" .env.docker
+                        chmod 600 .env.docker
 
-                    echo "ShopSphere deployment successful"
-               '''
+                        trap 'rm -f .env.docker' EXIT
+
+                        echo "Validating Docker Compose configuration"
+
+                        docker compose -p shopsphere config --quiet
+
+                        echo "Deploying ShopSphere"
+
+                        docker compose -p shopsphere up -d --no-build
+
+                        echo "Checking deployment status"
+
+                        docker compose -p shopsphere ps
+
+                        echo "Waiting for API health"
+
+                        curl --fail \
+                          --retry 10 \
+                          --retry-delay 5 \
+                          --retry-connrefused \
+                          http://127.0.0.1:8000/docs
+
+                        echo "ShopSphere deployment successful"
+                    '''
+                }
             }
         }
     }
-      
 
     post {
         always {
-            junit testResults: 'reports/junit.xml',
-                  allowEmptyResults: true
+            junit(
+                testResults: 'reports/junit.xml',
+                allowEmptyResults: true
+            )
 
-            archiveArtifacts artifacts: 'reports/**',
-                             allowEmptyArchive: true
+            archiveArtifacts(
+                artifacts: 'reports/**',
+                allowEmptyArchive: true
+            )
+
+            echo 'ShopSphere pipeline execution completed.'
         }
 
         success {
-            echo 'ShopSphere CI and Docker image build completed!'
+            echo 'ShopSphere CI/CD pipeline completed successfully!'
         }
 
         failure {
-            echo 'Pipeline failed. Check the console output.'
+            echo 'ShopSphere CI/CD pipeline failed. Check Console Output.'
         }
     }
 }
-
